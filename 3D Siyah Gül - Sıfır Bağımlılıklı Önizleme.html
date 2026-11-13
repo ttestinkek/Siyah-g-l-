@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Siyah Gül | Sıfır Bağımlılıklı Önizleme</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: radial-gradient(circle at 50% 35%, #160d20 0%, #07060c 62%, #020204 100%);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #f1f5f9;
+        }
+        #stage-wrap {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Üst Durum Rozeti & Başlık */
+        .top-hud {
+            position: fixed;
+            top: clamp(12px, 3vh, 24px);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            width: 92%;
+            max-width: 480px;
+            text-align: center;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+        .preview-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 5px 13px;
+            border-radius: 999px;
+            background: rgba(15, 14, 24, 0.78);
+            border: 1px solid rgba(52, 211, 153, 0.38);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: #a7f3d0;
+        }
+        .pulse-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 8px #10b981;
+            animation: pulse 1.8s infinite ease-in-out;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.35); opacity: 0.65; }
+        }
+        .rose-title {
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: clamp(22px, 5.5vw, 34px);
+            font-weight: 600;
+            letter-spacing: 0.24em;
+            color: #f8fafc;
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 0.95), 0 0 28px rgba(225, 29, 72, 0.35);
+            margin-top: 2px;
+        }
+        .rose-sub {
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            color: rgba(203, 213, 225, 0.75);
+        }
+
+        /* Alt Etkileşim Çubuğu */
+        .bottom-controls {
+            position: fixed;
+            bottom: clamp(14px, 3.2vh, 26px);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            width: 94%;
+            max-width: 520px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+        }
+        .ctrl-btn {
+            appearance: none;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(16, 14, 24, 0.76);
+            color: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.65);
+            transition: transform 0.18s ease, background 0.2s ease, border-color 0.2s ease;
+        }
+        .ctrl-btn:hover, .ctrl-btn:active {
+            background: rgba(54, 16, 34, 0.9);
+            border-color: rgba(244, 63, 94, 0.55);
+            transform: translateY(-1px);
+        }
+        .btn-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #f43f5e;
+            box-shadow: 0 0 8px #f43f5e;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="stage-wrap">
+        <canvas id="rose3d"></canvas>
+    </div>
+
+    <!-- Üst Durum Göstergesi ve Başlık -->
+    <header class="top-hud">
+        <div class="preview-badge">
+            <span class="pulse-dot"></span>
+            <span>Önizleme Aktif • 3D Motor Hazır</span>
+        </div>
+        <h1 class="rose-title">SİYAH GÜL</h1>
+        <p class="rose-sub">Parmağınızla veya fareyle sürükleyerek 360° döndürün</p>
+    </header>
+
+    <!-- Alt Kontrol Düğmeleri -->
+    <nav class="bottom-controls" aria-label="3D Siyah Gül Kontrolleri">
+        <button id="btn-rise" class="ctrl-btn" type="button">
+            <span>↻ Tekrar Yükselt</span>
+        </button>
+        <button id="btn-bloom" class="ctrl-btn" type="button">
+            <span class="btn-dot"></span>
+            <span id="txt-bloom">Aç / Kapat</span>
+        </button>
+        <button id="btn-light" class="ctrl-btn" type="button">
+            <span>✦</span>
+            <span id="txt-light">Işık Modu: Ay</span>
+        </button>
+    </nav>
+
+    <script>
+    (function () {
+        'use strict';
+
+        const canvas = document.getElementById('rose3d');
+        const ctx = canvas.getContext('2d', { alpha: true });
+
+        const btnRise = document.getElementById('btn-rise');
+        const btnBloom = document.getElementById('btn-bloom');
+        const txtBloom = document.getElementById('txt-bloom');
+        const btnLight = document.getElementById('btn-light');
+        const txtLight = document.getElementById('txt-light');
+
+        let W = 0;
+        let H = 0;
+        let DPR = 1;
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            W = Math.max(1, rect.width);
+            H = Math.max(1, rect.height);
+            DPR = Math.min(window.devicePixelRatio || 1, 2);
+            canvas.width = Math.round(W * DPR);
+            canvas.height = Math.round(H * DPR);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 3D Vektör Yardımcıları
+        function normalize(v) {
+            const len = Math.hypot(v.x, v.y, v.z) || 1;
+            return { x: v.x / len, y: v.y / len, z: v.z / len };
+        }
+        function dot(a, b) {
+            return a.x * b.x + a.y * b.y + a.z * b.z;
+        }
+        function cross(a, b) {
+            return {
+                x: a.y * b.z - a.z * b.y,
+                y: a.z * b.x - a.x * b.z,
+                z: a.x * b.y - a.y * b.x
+            };
+        }
+        function sub(a, b) {
+            return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+        }
+
+        // 3D Rotasyon Fonksiyonları
+        function rotX(p, a) {
+            const c = Math.cos(a), s = Math.sin(a);
+            return { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c };
+        }
+        function rotY(p, a) {
+            const c = Math.cos(a), s = Math.sin(a);
+            return { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c };
+        }
+        function rotZ(p, a) {
+            const c = Math.cos(a), s = Math.sin(a);
+            return { x: p.x * c - p.y * s, y: p.x * s + p.y * c, z: p.z };
+        }
+
+        // Kamera ve Etkileşim Durumu
+        const state = {
+            startTime: performance.now(),
+            camYaw: 0.25,
+            camPitch: 0.28,
+            targetYaw: 0.25,
+            targetPitch: 0.28,
+            autoSpin: true,
+            dragging: false,
+            lastX: 0,
+            lastY: 0,
+            bloomManual: false,
+            bloomTarget: 1.0,
+            bloomCurrent: 0.0,
+            lightMode: 0 // 0: Ay Işığı, 1: Kızıl Tutulma, 2: Mistik Mor
+        };
+
+        const lightThemes = [
+            {
+                name: 'Ay',
+                keyDir: normalize({ x: -0.55, y: 0.65, z: 0.52 }),
+                rimDir: normalize({ x: 0.65, y: -0.35, z: -0.67 }),
+                keyRgb: [195, 215, 255],
+                rimRgb: [225, 29, 72],
+                deepRgb: [46, 8, 22],
+                beamColor: 'rgba(180, 205, 255, 0.075)',
+                emberRgb: '244, 63, 94'
+            },
+            {
+                name: 'Kızıl',
+                keyDir: normalize({ x: -0.45, y: 0.6, z: 0.66 }),
+                rimDir: normalize({ x: 0.6, y: -0.3, z: -0.74 }),
+                keyRgb: [255, 130, 155],
+                rimRgb: [244, 63, 94],
+                deepRgb: [72, 10, 26],
+                beamColor: 'rgba(244, 63, 94, 0.085)',
+                emberRgb: '251, 113, 133'
+            },
+            {
+                name: 'Mistik',
+                keyDir: normalize({ x: -0.5, y: 0.7, z: 0.51 }),
+                rimDir: normalize({ x: 0.62, y: -0.32, z: -0.71 }),
+                keyRgb: [196, 175, 255],
+                rimRgb: [168, 85, 247],
+                deepRgb: [44, 14, 68],
+                beamColor: 'rgba(168, 85, 247, 0.08)',
+                emberRgb: '192, 132, 252'
+            }
+        ];
+
+        // Dokunma ve Fare 360° Döndürme Kontrolleri
+        const stageWrap = document.getElementById('stage-wrap');
+
+        function onPointerDown(x, y) {
+            state.dragging = true;
+            state.autoSpin = false;
+            state.lastX = x;
+            state.lastY = y;
+        }
+        function onPointerMove(x, y) {
+            if (!state.dragging) return;
+            const dx = x - state.lastX;
+            const dy = y - state.lastY;
+            state.lastX = x;
+            state.lastY = y;
+            state.targetYaw += dx * 0.011;
+            state.targetPitch = Math.max(-0.55, Math.min(0.85, state.targetPitch + dy * 0.008));
+        }
+        function onPointerUp() {
+            state.dragging = false;
+        }
+
+        stageWrap.addEventListener('mousedown', (e) => onPointerDown(e.clientX, e.clientY));
+        window.addEventListener('mousemove', (e) => onPointerMove(e.clientX, e.clientY));
+        window.addEventListener('mouseup', onPointerUp);
+
+        stageWrap.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                onPointerDown(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: true });
+        stageWrap.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) {
+                onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: true });
+        stageWrap.addEventListener('touchend', onPointerUp);
+
+        // Buton Etkileşimleri
+        btnRise.addEventListener('click', () => {
+            state.startTime = performance.now();
+            state.bloomManual = false;
+            state.bloomTarget = 1.0;
+            state.bloomCurrent = 0.0;
+            state.autoSpin = true;
+            txtBloom.textContent = 'Aç / Kapat';
+        });
+
+        btnBloom.addEventListener('click', () => {
+            state.bloomManual = true;
+            if (state.bloomTarget > 0.5) {
+                state.bloomTarget = 0.08;
+                txtBloom.textContent = 'Gülü Aç';
+            } else {
+                state.bloomTarget = 1.0;
+                txtBloom.textContent = 'Goncaya Dön';
+            }
+        });
+
+        btnLight.addEventListener('click', () => {
+            state.lightMode = (state.lightMode + 1) % lightThemes.length;
+            txtLight.textContent = 'Işık Modu: ' + lightThemes[state.lightMode].name;
+        });
+
+        // 3D Parametrik Gül Yaprağı Modeli Oluşturucu
+        const PETAL_COUNT = 34;
+        const goldenAngle = 2.399963229728653;
+        const petals = [];
+
+        for (let i = 0; i < PETAL_COUNT; i++) {
+            const ratio = i / (PETAL_COUNT - 1); // 0 = merkez gonca, 1 = en dış yaprak
+            const theta = i * goldenAngle;
+
+            const width = 0.44 + Math.pow(ratio, 0.78) * 1.24;
+            const height = 0.76 + Math.pow(ratio, 0.72) * 0.95;
+            const cupDepth = 0.18 + (1 - ratio * 0.45) * 0.24;
+            const curlOut = 0.06 + Math.pow(ratio, 1.45) * 0.42;
+            const radialDist = 0.04 + Math.pow(ratio, 1.12) * 0.36;
+            const yBase = 1.02 + (1 - ratio) * 0.14 - Math.pow(ratio, 1.5) * 0.12;
+
+            // Yaprağı 4x5 3D ızgara düğümleriyle tanımla (kavisli yüzey)
+            const segU = 4;
+            const segV = 5;
+            const localGrid = [];
+
+            for (let iv = 0; iv <= segV; iv++) {
+                const v = iv / segV;
+                const row = [];
+                const profile = Math.sin(Math.pow(v, 0.72) * Math.PI * 0.92);
+                const notch = v > 0.8 ? Math.sin((v - 0.8) / 0.2 * Math.PI) * 0.06 : 0;
+                for (let iu = 0; iu <= segU; iu++) {
+                    const u = iu / segU;
+                    const s = (u - 0.5) * 2;
+                    const x = s * (width * 0.5) * (0.24 + profile * 0.94);
+                    const y = v * height - Math.abs(s) * notch * height;
+                    const cup = (1 - s * s) * Math.sin(v * Math.PI) * cupDepth;
+                    const recurve = Math.pow(Math.max(0, v - 0.55) / 0.45, 2.0) * curlOut * (1 - 0.32 * s * s);
+                    const ruffle = Math.sin(s * 3.6 + i * 1.3) * Math.pow(v, 1.7) * 0.04;
+                    const z = cup - recurve + ruffle;
+                    row.push({ x, y, z, v, s });
+                }
+                localGrid.push(row);
+            }
+
+            petals.push({
+                index: i,
+                ratio,
+                theta,
+                radialDist,
+                yBase,
+                closedTilt: 0.08 + ratio * 0.24,
+                openTilt: 0.16 + Math.pow(ratio, 1.06) * 1.12,
+                hasDew: i > 11 && i % 5 === 0,
+                dewSide: i % 2 === 0 ? 1 : -1,
+                width,
+                height,
+                cupDepth,
+                localGrid
+            });
+        }
+
+        // Çanak Yapraklar (5 adet)
+        const sepals = [];
+        for (let s = 0; s < 5; s++) {
+            const theta = (s / 5) * Math.PI * 2 + 0.35;
+            sepals.push({ theta });
+        }
+
+        // Gövde Eğrisi, Dikenler ve Yaprak Dalları
+        function getStemPoint(t) {
+            // t: 0 (çiçek tabanı y=0.98) -> 1 (alt uç y=-3.4)
+            const y = 0.98 - t * 4.38;
+            const x = Math.sin(t * Math.PI * 1.35) * 0.16 - t * 0.04;
+            const z = Math.cos(t * Math.PI * 1.1) * 0.09 - 0.05;
+            return { x, y, z };
+        }
+
+        const thorns = [0.14, 0.28, 0.44, 0.60, 0.76].map((t, idx) => ({
+            t,
+            angle: idx * 2.15
+        }));
+
+        const leafBranches = [
+            { t: 0.23, yaw: 0.25, scale: 1.05 },
+            { t: 0.42, yaw: Math.PI - 0.35, scale: 0.95 },
+            { t: 0.62, yaw: 1.35, scale: 0.86 }
+        ];
+
+        // Yüzen Atmosfer Parçacıkları
+        const embers = Array.from({ length: 65 }, () => ({
+            x: (Math.random() - 0.5) * 5.2,
+            y: -3.2 + Math.random() * 6.8,
+            z: (Math.random() - 0.5) * 5.2,
+            speed: 0.004 + Math.random() * 0.008,
+            size: 1.2 + Math.random() * 2.2,
+            phase: Math.random() * Math.PI * 2,
+            isCrimson: Math.random() < 0.4
+        }));
+
+        function easeOutCubic(t) {
+            t = Math.max(0, Math.min(1, t));
+            return 1 - Math.pow(1 - t, 3);
+        }
+        function easeInOutCubic(t) {
+            t = Math.max(0, Math.min(1, t));
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        // Dünya Koordinatından 2D Ekrana Perspektif İzdüşüm
+        function projectPoint(p, focal, cx, cy, camDist) {
+            const zCam = camDist - p.z;
+            const invZ = focal / Math.max(0.8, zCam);
+            return {
+                sx: cx + p.x * invZ,
+                sy: cy - p.y * invZ,
+                z: p.z,
+                scale: invZ
+            };
+        }
+
+        // Dünya Dönüşümü (Gül Yükselişi + Kamera Yörüngesi)
+        function toWorld(localPt, riseY, roseYaw, roseSwayX, roseSwayZ, camYaw, camPitch) {
+            let p = rotZ(localPt, roseSwayZ);
+            p = rotX(p, roseSwayX);
+            p = rotY(p, roseYaw);
+            p = { x: p.x, y: p.y + riseY, z: p.z };
+            p = rotY(p, camYaw);
+            p = rotX(p, camPitch);
+            return p;
+        }
+
+        function renderFrame(now) {
+            requestAnimationFrame(renderFrame);
+
+            const elapsed = (now - state.startTime) * 0.001;
+            const theme = lightThemes[state.lightMode];
+
+            // Kamera Yumuşak Takip
+            if (state.autoSpin) {
+                state.targetYaw += 0.0038;
+            }
+            state.camYaw += (state.targetYaw - state.camYaw) * 0.08;
+            state.camPitch += (state.targetPitch - state.camPitch) * 0.08;
+
+            // Aşama 1: Alttan Yükselme Koreografisi (0s -> 3.0s)
+            const riseT = easeOutCubic(elapsed / 3.0);
+            const riseY = -5.6 + riseT * 5.25; // Ekranın altından yükselip merkeze oturur
+            const spinIntro = (1 - riseT) * Math.PI * 1.25;
+            const swayZ = Math.sin(elapsed * 1.15) * 0.032;
+            const swayX = Math.cos(elapsed * 0.9) * 0.024;
+
+            // Aşama 2: Taç Yaprakların Katman Katman Açılması (1.5s -> 4.8s)
+            if (!state.bloomManual) {
+                state.bloomTarget = easeInOutCubic((elapsed - 1.5) / 3.3);
+            }
+            state.bloomCurrent += (state.bloomTarget - state.bloomCurrent) * 0.06;
+
+            // Tuvali Temizle
+            ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+            ctx.clearRect(0, 0, W, H);
+
+            const cx = W * 0.5;
+            const cy = H * 0.50;
+            const minDim = Math.min(W, H);
+            const focal = minDim * (W < 600 ? 0.88 : 0.82);
+            const camDist = 6.2;
+
+            // Hacimsel Ay Işığı Huzmesi (Arka Plan Atmosferi)
+            const beamGrad = ctx.createRadialGradient(cx - minDim * 0.14, cy - minDim * 0.25, 10, cx, cy, minDim * 0.72);
+            beamGrad.addColorStop(0, theme.beamColor);
+            beamGrad.addColorStop(0.65, 'rgba(15, 12, 26, 0.03)');
+            beamGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = beamGrad;
+            ctx.fillRect(0, 0, W, H);
+
+            // Tüm 3D Yüzeyleri (Gövde, Diken, Yaprak, Taç Yaprak, Çiy) Derinlik Sırasına (Z-Buffer Painter) Topla
+            const renderList = [];
+
+            // 1. 3D Gövde Segmentleri
+            const stemSteps = 26;
+            for (let i = 0; i < stemSteps; i++) {
+                const t0 = i / stemSteps;
+                const t1 = (i + 1) / stemSteps;
+                const p0 = toWorld(getStemPoint(t0), riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch);
+                const p1 = toWorld(getStemPoint(t1), riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch);
+                const pr0 = projectPoint(p0, focal, cx, cy, camDist);
+                const pr1 = projectPoint(p1, focal, cx, cy, camDist);
+
+                renderList.push({
+                    z: (p0.z + p1.z) * 0.5,
+                    draw() {
+                        const thick = Math.max(2.2, 0.056 * pr0.scale);
+                        const g = ctx.createLinearGradient(pr0.sx - thick, pr0.sy, pr0.sx + thick, pr0.sy);
+                        g.addColorStop(0, '#1e3529');
+                        g.addColorStop(0.45, '#0c1812');
+                        g.addColorStop(1, '#040907');
+                        ctx.strokeStyle = g;
+                        ctx.lineWidth = thick * 2;
+                        ctx.lineCap = 'round';
+                        ctx.beginPath();
+                        ctx.moveTo(pr0.sx, pr0.sy);
+                        ctx.lineTo(pr1.sx, pr1.sy);
+                        ctx.stroke();
+                    }
+                });
+            }
+
+            // 2. 3D Dikenler
+            for (let i = 0; i < thorns.length; i++) {
+                const th = thorns[i];
+                const base = getStemPoint(th.t);
+                const dir = { x: Math.cos(th.angle), y: 0.25, z: Math.sin(th.angle) };
+                const pBase = toWorld(base, riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch);
+                const pTip = toWorld({
+                    x: base.x + dir.x * 0.19,
+                    y: base.y + dir.y * 0.16,
+                    z: base.z + dir.z * 0.19
+                }, riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch);
+                const pUp = toWorld({ x: base.x, y: base.y + 0.06, z: base.z }, riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch);
+                const pDn = toWorld({ x: base.x, y: base.y - 0.06, z: base.z }, riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch);
+
+                const prTip = projectPoint(pTip, focal, cx, cy, camDist);
+                const prUp = projectPoint(pUp, focal, cx, cy, camDist);
+                const prDn = projectPoint(pDn, focal, cx, cy, camDist);
+
+                renderList.push({
+                    z: (pBase.z + pTip.z) * 0.5,
+                    draw() {
+                        ctx.fillStyle = '#26131b';
+                        ctx.beginPath();
+                        ctx.moveTo(prUp.sx, prUp.sy);
+                        ctx.lineTo(prTip.sx, prTip.sy);
+                        ctx.lineTo(prDn.sx, prDn.sy);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                });
+            }
+
+            // 3. 3D Tırtıklı Gül Yaprakları
+            for (let b = 0; b < leafBranches.length; b++) {
+                const br = leafBranches[b];
+                const anchor = getStemPoint(br.t);
+                const leaflets = [
+                    { ox: 0.58, oy: 0.12, oz: 0.04, len: 0.78, wid: 0.38, pitch: 0.35, yawOff: 0.0 },
+                    { ox: 0.32, oy: 0.16, oz: 0.18, len: 0.54, wid: 0.27, pitch: 0.48, yawOff: 0.65 },
+                    { ox: 0.32, oy: 0.16, oz: -0.18, len: 0.54, wid: 0.27, pitch: 0.48, yawOff: -0.65 }
+                ];
+
+                // Yaprak sapı
+                const sapEndLocal = rotY({ x: 0.62 * br.scale, y: 0.12 * br.scale, z: 0 }, br.yaw);
+                const wSap0 = toWorld(anchor, riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch);
+                const wSap1 = toWorld({
+                    x: anchor.x + sapEndLocal.x,
+                    y: anchor.y + sapEndLocal.y,
+                    z: anchor.z + sapEndLocal.z
+                }, riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch);
+                const prS0 = projectPoint(wSap0, focal, cx, cy, camDist);
+                const prS1 = projectPoint(wSap1, focal, cx, cy, camDist);
+
+                renderList.push({
+                    z: (wSap0.z + wSap1.z) * 0.5,
+                    draw() {
+                        ctx.strokeStyle = '#112219';
+                        ctx.lineWidth = Math.max(1.5, 0.022 * prS0.scale);
+                        ctx.beginPath();
+                        ctx.moveTo(prS0.sx, prS0.sy);
+                        ctx.lineTo(prS1.sx, prS1.sy);
+                        ctx.stroke();
+                    }
+                });
+
+                for (let lf = 0; lf < leaflets.length; lf++) {
+                    const L = leaflets[lf];
+                    const ptsLocal = [
+                        { x: 0, y: 0, z: 0 },
+                        { x: L.len * 0.45, y: 0.05, z: L.wid * 0.5 },
+                        { x: L.len, y: -0.08, z: 0 },
+                        { x: L.len * 0.45, y: 0.05, z: -L.wid * 0.5 }
+                    ].map(pt => {
+                        let q = { x: pt.x * br.scale, y: pt.y * br.scale, z: pt.z * br.scale };
+                        q = rotZ(q, -L.pitch);
+                        q = rotY(q, br.yaw + L.yawOff);
+                        const baseOff = rotY({ x: L.ox * br.scale, y: L.oy * br.scale, z: L.oz * br.scale }, br.yaw);
+                        return {
+                            x: anchor.x + baseOff.x + q.x,
+                            y: anchor.y + baseOff.y + q.y,
+                            z: anchor.z + baseOff.z + q.z
+                        };
+                    });
+
+                    const wPts = ptsLocal.map(pt => toWorld(pt, riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch));
+                    const prPts = wPts.map(pt => projectPoint(pt, focal, cx, cy, camDist));
+                    const avgZ = (wPts[0].z + wPts[1].z + wPts[2].z + wPts[3].z) * 0.25;
+                    const nrm = normalize(cross(sub(wPts[1], wPts[0]), sub(wPts[3], wPts[0])));
+                    const lit = Math.abs(dot(nrm, theme.keyDir));
+
+                    renderList.push({
+                        z: avgZ,
+                        draw() {
+                            const g = ctx.createLinearGradient(prPts[0].sx, prPts[0].sy, prPts[2].sx, prPts[2].sy);
+                            const hi = Math.round(24 + lit * 26);
+                            g.addColorStop(0, '#09140e');
+                            g.addColorStop(0.5, `rgb(${Math.round(hi * 0.55)}, ${hi}, ${Math.round(hi * 0.72)})`);
+                            g.addColorStop(1, '#060d09');
+                            ctx.fillStyle = g;
+                            ctx.beginPath();
+                            ctx.moveTo(prPts[0].sx, prPts[0].sy);
+                            ctx.quadraticCurveTo(prPts[1].sx, prPts[1].sy, prPts[2].sx, prPts[2].sy);
+                            ctx.quadraticCurveTo(prPts[3].sx, prPts[3].sy, prPts[0].sx, prPts[0].sy);
+                            ctx.closePath();
+                            ctx.fill();
+
+                            // Orta damar çizgisi
+                            ctx.strokeStyle = 'rgba(140, 190, 165, 0.22)';
+                            ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            ctx.moveTo(prPts[0].sx, prPts[0].sy);
+                            ctx.lineTo(prPts[2].sx, prPts[2].sy);
+                            ctx.stroke();
+                        }
+                    });
+                }
+            }
+
+            // 4. Çanak Yapraklar (5 adet)
+            for (let s = 0; s < sepals.length; s++) {
+                const sp = sepals[s];
+                const tilt = 0.45 + state.bloomCurrent * 0.85;
+                const localPts = [
+                    { x: 0, y: 0, z: 0 },
+                    { x: -0.11, y: 0.34, z: 0.04 },
+                    { x: 0, y: 0.74, z: -0.14 },
+                    { x: 0.11, y: 0.34, z: 0.04 }
+                ].map(pt => {
+                    let q = rotX(pt, tilt);
+                    q = { x: q.x, y: q.y + 0.96, z: q.z + 0.15 };
+                    return rotY(q, sp.theta);
+                });
+
+                const wPts = localPts.map(pt => toWorld(pt, riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch));
+                const prPts = wPts.map(pt => projectPoint(pt, focal, cx, cy, camDist));
+                const avgZ = (wPts[0].z + wPts[1].z + wPts[2].z + wPts[3].z) * 0.25;
+
+                renderList.push({
+                    z: avgZ,
+                    draw() {
+                        ctx.fillStyle = '#0c1b13';
+                        ctx.beginPath();
+                        ctx.moveTo(prPts[0].sx, prPts[0].sy);
+                        ctx.lineTo(prPts[1].sx, prPts[1].sy);
+                        ctx.lineTo(prPts[2].sx, prPts[2].sy);
+                        ctx.lineTo(prPts[3].sx, prPts[3].sy);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                });
+            }
+
+            // 5. 34 Katmanlı 3D Kadife Siyah Taç Yapraklar
+            for (let i = 0; i < petals.length; i++) {
+                const ptObj = petals[i];
+                const delay = (1 - ptObj.ratio) * 0.42;
+                const localBloom = easeInOutCubic((state.bloomCurrent - delay) / (1 - delay * 0.8));
+                const breathe = Math.sin(elapsed * 1.7 + i * 0.45) * 0.018 * (0.3 + ptObj.ratio);
+                const tilt = ptObj.closedTilt + (ptObj.openTilt - ptObj.closedTilt) * localBloom + breathe;
+
+                // Izgara düğümlerini dünya uzayına dönüştür ve izdüşüm al
+                const segV = ptObj.localGrid.length - 1;
+                const segU = ptObj.localGrid[0].length - 1;
+                const worldGrid = [];
+                const projGrid = [];
+
+                for (let iv = 0; iv <= segV; iv++) {
+                    const wRow = [];
+                    const pRow = [];
+                    for (let iu = 0; iu <= segU; iu++) {
+                        const lv = ptObj.localGrid[iv][iu];
+                        let q = rotX(lv, tilt);
+                        q = { x: q.x, y: q.y + ptObj.yBase, z: q.z + ptObj.radialDist };
+                        q = rotY(q, ptObj.theta);
+                        const wp = toWorld(q, riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch);
+                        wRow.push(wp);
+                        pRow.push(projectPoint(wp, focal, cx, cy, camDist));
+                    }
+                    worldGrid.push(wRow);
+                    projGrid.push(pRow);
+                }
+
+                // Her 4'lü kadife yüzey yamasını (quad) ayrı Z-derinliği ve ışık hesabıyla ekle
+                for (let iv = 0; iv < segV; iv++) {
+                    const vMid = (iv + 0.5) / segV;
+                    for (let iu = 0; iu < segU; iu++) {
+                        const w00 = worldGrid[iv][iu];
+                        const w10 = worldGrid[iv][iu + 1];
+                        const w11 = worldGrid[iv + 1][iu + 1];
+                        const w01 = worldGrid[iv + 1][iu];
+
+                        const p00 = projGrid[iv][iu];
+                        const p10 = projGrid[iv][iu + 1];
+                        const p11 = projGrid[iv + 1][iu + 1];
+                        const p01 = projGrid[iv + 1][iu];
+
+                        const quadZ = (w00.z + w10.z + w11.z + w01.z) * 0.25;
+
+                        // Yüzey normali ile Ay Işığı ve Kızıl Rim Işığı hesaplaması
+                        const e1 = sub(w10, w00);
+                        const e2 = sub(w01, w00);
+                        let nrm = normalize(cross(e1, e2));
+                        // Çift taraflı kadife aydınlatma (kameraya bakan yüz)
+                        if (nrm.z < 0) {
+                            nrm = { x: -nrm.x, y: -nrm.y, z: -nrm.z };
+                        }
+
+                        const keyDiff = Math.max(0, dot(nrm, theme.keyDir));
+                        const rimDiff = Math.max(0, dot(nrm, theme.rimDir));
+                        // Fresnel kenar kadife parıltısı (üst kenarlarda belirgin)
+                        const fresnel = Math.pow(1 - Math.max(0, nrm.z), 2.2) * (0.35 + vMid * 0.85);
+                        const spec = Math.pow(keyDiff, 5) * 0.55;
+
+                        // Dipte derin kızıl-mürdüm alt ton, gövdede obsidyen kadife siyah, üst kenarda gümüş-mavi parlama
+                        const baseDark = 7 + vMid * 10 + ptObj.ratio * 4;
+                        const deepFactor = Math.pow(1 - vMid, 1.8) * 0.65;
+
+                        const r = Math.min(255, Math.round(
+                            baseDark +
+                            theme.deepRgb[0] * deepFactor +
+                            theme.keyRgb[0] * (keyDiff * 0.14 + fresnel * 0.18 + spec * 0.35) +
+                            theme.rimRgb[0] * (rimDiff * 0.22)
+                        ));
+                        const g = Math.min(255, Math.round(
+                            baseDark +
+                            theme.deepRgb[1] * deepFactor +
+                            theme.keyRgb[1] * (keyDiff * 0.15 + fresnel * 0.20 + spec * 0.38) +
+                            theme.rimRgb[1] * (rimDiff * 0.10)
+                        ));
+                        const b = Math.min(255, Math.round(
+                            baseDark + 3 +
+                            theme.deepRgb[2] * deepFactor +
+                            theme.keyRgb[2] * (keyDiff * 0.18 + fresnel * 0.24 + spec * 0.45) +
+                            theme.rimRgb[2] * (rimDiff * 0.16)
+                        ));
+
+                        const isTopEdge = iv === segV - 1;
+                        const rimStrokeAlpha = isTopEdge ? (0.14 + fresnel * 0.38 + keyDiff * 0.22) : 0;
+
+                        renderList.push({
+                            z: quadZ,
+                            draw() {
+                                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                                ctx.beginPath();
+                                ctx.moveTo(p00.sx, p00.sy);
+                                ctx.lineTo(p10.sx, p10.sy);
+                                ctx.lineTo(p11.sx, p11.sy);
+                                ctx.lineTo(p01.sx, p01.sy);
+                                ctx.closePath();
+                                ctx.fill();
+
+                                // Üst kenarda kadife ay ışığı rim-light çizgisi
+                                if (isTopEdge && rimStrokeAlpha > 0.16) {
+                                    ctx.strokeStyle = `rgba(${theme.keyRgb[0]}, ${theme.keyRgb[1]}, ${theme.keyRgb[2]}, ${rimStrokeAlpha.toFixed(2)})`;
+                                    ctx.lineWidth = 1.25;
+                                    ctx.beginPath();
+                                    ctx.moveTo(p01.sx, p01.sy);
+                                    ctx.lineTo(p11.sx, p11.sy);
+                                    ctx.stroke();
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Seçili taç yapraklarda parlayan 3D çiy damlası
+                if (ptObj.hasDew) {
+                    let dewLocal = {
+                        x: ptObj.dewSide * ptObj.width * 0.18,
+                        y: ptObj.height * 0.66,
+                        z: ptObj.cupDepth * 0.58
+                    };
+                    dewLocal = rotX(dewLocal, tilt);
+                    dewLocal = { x: dewLocal.x, y: dewLocal.y + ptObj.yBase, z: dewLocal.z + ptObj.radialDist };
+                    dewLocal = rotY(dewLocal, ptObj.theta);
+                    const wDew = toWorld(dewLocal, riseY, spinIntro, swayX, swayZ, state.camYaw, state.camPitch);
+                    const prDew = projectPoint(wDew, focal, cx, cy, camDist);
+
+                    renderList.push({
+                        z: wDew.z + 0.03,
+                        draw() {
+                            const rad = Math.max(2.0, 0.025 * prDew.scale);
+                            const dg = ctx.createRadialGradient(
+                                prDew.sx - rad * 0.35, prDew.sy - rad * 0.35, rad * 0.1,
+                                prDew.sx, prDew.sy, rad
+                            );
+                            dg.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+                            dg.addColorStop(0.55, 'rgba(186, 230, 253, 0.45)');
+                            dg.addColorStop(1, 'rgba(15, 23, 42, 0.15)');
+                            ctx.fillStyle = dg;
+                            ctx.beginPath();
+                            ctx.arc(prDew.sx, prDew.sy, rad, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    });
+                }
+            }
+
+            // Ressam Algoritması: Uzaktan Yakına Doğru Sırala ve Çiz
+            renderList.sort((a, b) => a.z - b.z);
+            for (let i = 0; i < renderList.length; i++) {
+                renderList[i].draw();
+            }
+
+            // Yüzen 3D Ay Tozu ve Kızıl Kor Parçacıkları
+            for (let i = 0; i < embers.length; i++) {
+                const em = embers[i];
+                em.y += em.speed;
+                if (em.y > 3.6) em.y = -3.4;
+
+                let wp = {
+                    x: em.x + Math.sin(elapsed * 0.9 + em.phase) * 0.25,
+                    y: em.y,
+                    z: em.z + Math.cos(elapsed * 0.8 + em.phase) * 0.25
+                };
+                wp = rotY(wp, state.camYaw * 0.5);
+                wp = rotX(wp, state.camPitch * 0.5);
+                const pr = projectPoint(wp, focal, cx, cy, camDist);
+                const alpha = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(elapsed * 2.2 + em.phase));
+                const r = Math.max(0.8, em.size * (pr.scale / 220));
+
+                ctx.fillStyle = em.isCrimson
+                    ? `rgba(${theme.emberRgb}, ${alpha.toFixed(2)})`
+                    : `rgba(210, 225, 255, ${(alpha * 0.85).toFixed(2)})`;
+                ctx.beginPath();
+                ctx.arc(pr.sx, pr.sy, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        requestAnimationFrame(renderFrame);
+    })();
+    </script>
+</body>
+</html>
